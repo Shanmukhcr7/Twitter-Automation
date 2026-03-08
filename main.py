@@ -82,20 +82,19 @@ def post_single_item(viral_item: dict) -> bool:
     tweet_text = generate_tweet(viral_item)
     hashtags = generate_hashtags(viral_item, tweet_text=tweet_text)
     
-    # Image: prefer the native tweet image (always accurate), fall back to Unsplash search
+    # Image: use native tweet image only — no Unsplash fallback
+    # A tweet without an image is far better than one with an unrelated stock photo
     native_url = viral_item.get("native_image_url")
     if native_url:
         image_path = download_direct_image(native_url)
         if image_path:
             logger.info("Using native tweet image.")
         else:
-            logger.info("Native image download failed. Falling back to Unsplash.")
-            source_text = viral_item.get("title") or viral_item.get("text", "")
-            image_path = fetch_image(source_text)
+            logger.info("Native image download failed. Posting as text-only.")
+            image_path = None
     else:
-        # For news items or tweets without media, use Unsplash
-        source_text = viral_item.get("title") or viral_item.get("text", "")
-        image_path = fetch_image(source_text)
+        logger.info("No native image available. Posting as text-only.")
+        image_path = None
 
     # Post
     success = post_tweet(tweet_text, hashtags, image_path)
