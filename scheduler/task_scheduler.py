@@ -46,6 +46,7 @@ def fill_queues(current_hour: int):
 def dispatch_15min_job():
     """
     Sub-Interval dispatcher that fires every 15 minutes (:00, :15, :30, :45).
+    Active hours: 08:00 – 23:59 IST only.
     - Refills queues at the top of every hour.
     - Pops and posts exactly 1 Tweet every 15 minutes.
     - Pops and posts exactly 1 News item every 3 hours at the top of the hour.
@@ -54,6 +55,11 @@ def dispatch_15min_job():
     current_hour = now_ist.hour
     current_minute = now_ist.minute
     logger.info(f"Sub-Interval Dispatcher woke up. Current IST time: {now_ist.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # ⏸ Quiet hours: 00:00 – 07:59 IST — no scraping, no posting
+    if current_hour < 8:
+        logger.info(f"😴 Quiet hours (00:00–08:00 IST). Sleeping until 08:00. Skipping all jobs.")
+        return
 
     # Top of the hour: refill the queues with fresh content
     if current_minute < 15:
