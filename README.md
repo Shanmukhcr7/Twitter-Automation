@@ -93,50 +93,19 @@ To start the daemon that monitors, evaluates, and posts based on intervals:
 python -m scheduler.task_scheduler
 ```
 
-## Deployment Guide
+## Deployment Guide (Self-Hosted via Coolify / Docker)
 
-For optimal 24/7 uptime on a Linux server:
+For optimal 24/7 uptime on your Hostinger KVM VPS, this project is fully Dockerized for easy deployment on [Coolify](https://coolify.io).
 
-1. **Upload your code** to your VPS (e.g., AWS EC2, DigitalOcean Droplet, Linode).
-2. **Install PM2** (Node.js process manager) to manage the Python process robustly.
-   ```bash
-   sudo apt update
-   sudo apt install npm
-   sudo npm install -g pm2
-   ```
-3. **Start the Scheduler with PM2**:
-   Make sure you are in the bot directory, and have your virtual environment packages accessible. 
-   ```bash
-   pm2 start "venv/bin/python -m scheduler.task_scheduler" --name "twitter_automation_engine"
-   ```
-4. **Ensure Persistence Across Reboots**:
-   ```bash
-   pm2 startup
-   pm2 save
-   ```
-
-### Alternatively using systemd:
-1. Create a service file: `sudo nano /etc/systemd/system/twitterbot.service`
-2. Configure:
-   ```ini
-   [Unit]
-   Description=Twitter Viral Automation Bot
-   After=network.target
-
-   [Service]
-   User=ubuntu
-   WorkingDirectory=/path/to/twitter_automation_bot
-   ExecStart=/path/to/twitter_automation_bot/venv/bin/python -m scheduler.task_scheduler
-   Restart=always
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-3. Enable and start:
-   ```bash
-   sudo systemctl enable twitterbot
-   sudo systemctl start twitterbot
-   ```
+1. **Upload your code** to your private GitHub repository.
+2. **Access Coolify**: Open your Coolify dashboard and click **Create** -> **Project** -> **Add New Resource**.
+3. **Connect GitHub**: Select your GitHub repository.
+4. **Deploy via Docker**: 
+   - Coolify will automatically detect the `Dockerfile` (or you can use the `docker-compose.yml` integration) and build the Python 3.10 environment.
+5. **Environment Variables**:
+   Under the **Environment Variables** tab in your newly created Coolify application, securely paste EVERY API key from your local `.env` file (e.g., `TWITTER_API_KEY`, `NVIDIA_API_KEY`, `UNSPLASH_KEY`).
+6. **Start the Service**:
+   Click **Deploy**. Coolify will compile the container and spin up the bot as a background worker. Thanks to Docker, it will automatically restart upon server reboots or application crashes forever!
 
 ## Logs & Debugging
-Check the `logs/` directory for operational info (`bot_info.log`) and dedicated error traps (`bot_error.log`). Loguru automatically handles log rotation to keep storage consumption safe.
+Check the `logs/` directory for operational info (`bot_info.log`) and dedicated error traps (`bot_error.log`). Loguru automatically handles log rotation. If running inside Coolify, you can simply view the live terminal output natively inside your Coolify dashboard.
