@@ -92,9 +92,9 @@ def post_tweet(tweet_text: str, hashtags: str = "", image_path: Optional[str] = 
                 
             # Click the Post button
             logger.debug("Clicking the Post button...")
-            post_button_selector = '[data-testid="tweetButton"]'
-            page.wait_for_selector(post_button_selector, state="visible")
-            page.locator(post_button_selector).first.click()
+            post_button_locator = page.locator('[data-testid="tweetButton"]:not([disabled])').first
+            post_button_locator.wait_for(state="visible", timeout=15000)
+            post_button_locator.click()
             
             # Wait a few seconds to ensure the POST request fires before the browser closes
             time.sleep(5)
