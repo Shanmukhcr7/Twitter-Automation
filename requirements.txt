@@ -1,0 +1,8 @@
+tweepy
+beautifulsoup4
+requests
+schedule
+python-dotenv
+pillow
+loguru
+pytz
