@@ -9,6 +9,7 @@ from generator.hashtag_generator import generate_hashtags
 from media.image_fetcher import fetch_image
 from poster.twitter_poster import post_tweet
 from utils.text_cleaner import clean_text
+from utils.state_manager import filter_unposted, mark_as_posted
 
 logger = get_logger()
 
@@ -57,8 +58,10 @@ def job_scrape_and_detect(content_type: str = None, top_n: int = 4):
         logger.warning(f"No {content_type or 'scraped'} data available to evaluate.")
         return []
     
-    # Return the top N candidates safely extracted from the dataset
-    return detect_viral_content(all_data, cache["trends"], content_type, top_n=top_n)
+    # Return the top N candidates — filter out already-posted items first
+    candidates = detect_viral_content(all_data, cache["trends"], content_type, top_n=top_n)
+    fresh = filter_unposted(candidates)
+    return fresh
 
 def post_single_item(viral_item: dict) -> bool:
     """
@@ -82,6 +85,7 @@ def post_single_item(viral_item: dict) -> bool:
     success = post_tweet(tweet_text, hashtags, image_path)
     if success:
         logger.info("✅ Successfully posted queued item.")
+        mark_as_posted(viral_item)  # Persist to JSON so it's never posted again
         return True
     else:
         logger.error("❌ Failed to post queued item.")

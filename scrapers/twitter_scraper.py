@@ -67,28 +67,30 @@ def scrape_twitter(max_tweets: int = 5, max_age_hours: int = 2) -> List[Dict]:
                     link = item.link.text if item.link else ""
                     pub_date_str = item.pubDate.text if item.pubDate else ""
                     
-                    if not text or not pub_date_str:
-                        continue
-                        
-                    # Parse the RSS pubDate (usually RFC-822 formatted like "Sun, 08 Mar 2026 09:33:05 GMT")
-                    try:
-                        from email.utils import parsedate_to_datetime
-                        import pytz
-                        import datetime
-                        
-                        dt = parsedate_to_datetime(pub_date_str)
-                        # We just need relative age in hours securely
-                        now_utc = datetime.datetime.now(datetime.timezone.utc)
-                        age = (now_utc - dt).total_seconds() / 3600.0
-                        
-                        if age > max_age_hours:
-                            continue # Too old, skip it
-                    except Exception as e:
-                        logger.debug(f"Could not parse pubDate '{pub_date_str}': {e}")
-                    text = clean_text(raw_text)
-                    link = item.link.text if item.link else ""
-                    
                     if not text:
+                        continue
+                    
+                    # Enforce freshness using pubDate timestamp
+                    date_ok = False
+                    if pub_date_str:
+                        try:
+                            from email.utils import parsedate_to_datetime
+                            import datetime as dt_module
+                            
+                            parsed_dt = parsedate_to_datetime(pub_date_str)
+                            now_utc = dt_module.datetime.now(dt_module.timezone.utc)
+                            age_hours = (now_utc - parsed_dt).total_seconds() / 3600.0
+                            
+                            if age_hours <= max_age_hours:
+                                date_ok = True
+                            else:
+                                logger.debug(f"Skipping tweet aged {age_hours:.1f}h (max: {max_age_hours}h): {text[:30]}")
+                        except Exception as e:
+                            logger.debug(f"Could not parse pubDate '{pub_date_str}': {e}. Skipping item.")
+                    else:
+                        logger.debug("No pubDate found in RSS item. Skipping to avoid stale content.")
+                    
+                    if not date_ok:
                         continue
                         
                     # Nitter RSS feed won't expose accurate likes/retweets unfortunately, 

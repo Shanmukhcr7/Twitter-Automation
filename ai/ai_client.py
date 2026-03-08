@@ -110,6 +110,19 @@ def generate_hashtags(text: str) -> Optional[str]:
     return _call_ai_api(prompt, system_message="You are a hashtag generator. Output only space-separated hashtags.", max_tokens=50)
 
 def generate_image_query(text: str) -> Optional[str]:
-    """Converts a block of text into a concise image search query."""
-    prompt = f"Convert the following tweet into a short image search query.\n\nTweet:\n{text}\n\nReturn only the search phrase."
-    return _call_ai_api(prompt, system_message="You extract high-quality, short search queries for stock images. Output only the short query string.", max_tokens=20)
+    """Converts a block of text into a precise, specific Unsplash image search query."""
+    prompt = f"""Given this tweet content, create a very specific 3-5 word Unsplash image search query that precisely matches the topic visually.
+
+Tweet:
+{text}
+
+Rules:
+- Be very specific (e.g. 'Indian parliament protest crowd' not 'politics')
+- No generic words like 'news', 'trending', 'social media'
+- Describe a real visual scene, not abstract concepts
+- Return ONLY the query phrase, nothing else"""
+    return _call_ai_api(
+        prompt,
+        system_message="You create precise, specific search queries for stock photography. Return ONLY a 3-5 word visual search phrase. No explanation.",
+        max_tokens=30
+    )

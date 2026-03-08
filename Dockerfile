@@ -8,7 +8,7 @@ ENV TZ=Asia/Kolkata
 WORKDIR /app
 
 # Ensure logs and temp directories exist
-RUN mkdir -p /app/logs /app/media/temp
+RUN mkdir -p /app/logs /app/media/temp /app/data
 
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
