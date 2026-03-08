@@ -13,7 +13,10 @@ NITTER_INSTANCES = [
     "https://nitter.net",
     "https://nitter.cz",
     "https://nitter.poast.org",
-    "https://nitter.privacydev.net"
+    "https://nitter.privacydev.net",
+    "https://nitter.esmailelbob.xyz",
+    "https://nitter.projectsegfau.lt",
+    "https://xcancel.com"
 ]
 
 def scrape_twitter(max_tweets: int = 5) -> List[Dict]:
@@ -50,7 +53,7 @@ def scrape_twitter(max_tweets: int = 5) -> List[Dict]:
                     
                 response.raise_for_status()
                 
-                soup = BeautifulSoup(response.content, "xml")
+                soup = BeautifulSoup(response.content, "lxml-xml")
                 items = soup.find_all("item")
                 
                 if not items:
