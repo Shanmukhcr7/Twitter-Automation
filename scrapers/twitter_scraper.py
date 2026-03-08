@@ -62,10 +62,22 @@ def scrape_twitter(max_tweets: int = 5, max_age_hours: int = 2) -> List[Dict]:
                     continue
 
                 for item in items:
-                    raw_text = item.description.text if item.description else ""
-                    text = clean_text(raw_text)
+                    raw_html = item.description.text if item.description else ""
+                    text = clean_text(raw_html)
                     link = item.link.text if item.link else ""
                     pub_date_str = item.pubDate.text if item.pubDate else ""
+                    
+                    # Extract native tweet image directly from Nitter's embedded HTML.
+                    # Nitter puts tweet images as <img src="https://pbs.twimg.com/..."> in the description.
+                    native_image_url = None
+                    try:
+                        desc_soup = BeautifulSoup(raw_html, "html.parser")
+                        img_tag = desc_soup.find("img", src=lambda s: s and s.startswith("https://"))
+                        if img_tag:
+                            native_image_url = img_tag["src"]
+                            logger.debug(f"Extracted native tweet image: {native_image_url[:60]}")
+                    except Exception:
+                        pass
                     
                     if not text:
                         continue
@@ -102,6 +114,7 @@ def scrape_twitter(max_tweets: int = 5, max_age_hours: int = 2) -> List[Dict]:
                         "likes": 50, # Mock baseline engagement for scoring
                         "retweets": 10, # Mock baseline engagement for scoring
                         "url": link,
+                        "native_image_url": native_image_url,  # Direct tweet image if available
                         "type": "tweet"
                     })
                 

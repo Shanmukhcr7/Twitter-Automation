@@ -13,6 +13,34 @@ logger = get_logger()
 
 UNSPLASH_API_URL = "https://api.unsplash.com/photos/random"
 
+def download_direct_image(image_url: str) -> Optional[str]:
+    """
+    Downloads an image directly from a known URL (e.g. native tweet image from pbs.twimg.com).
+    Skips any search API — ideal for using the original tweet's attached media.
+    """
+    if not image_url:
+        return None
+    try:
+        logger.info(f"Downloading native tweet image: {image_url[:70]}")
+        headers = {"User-Agent": "Mozilla/5.0"}
+        img_response = requests.get(image_url, headers=headers, timeout=15)
+        img_response.raise_for_status()
+
+        image = Image.open(BytesIO(img_response.content))
+        image.verify()
+
+        filepath = os.path.join(MEDIA_DIR, "temp.jpg")
+        image = Image.open(BytesIO(img_response.content))
+        if image.mode in ("RGBA", "P"):
+            image = image.convert("RGB")
+        image.save(filepath, format="JPEG")
+
+        logger.info(f"Native tweet image saved to: {filepath}")
+        return filepath
+    except Exception as e:
+        logger.warning(f"Failed to download native tweet image: {e}")
+        return None
+
 def fetch_image(content_text: str) -> Optional[str]:
     """
     Uses AI to generate a clean search query from the provided text,
