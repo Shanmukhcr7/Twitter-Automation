@@ -19,10 +19,11 @@ NITTER_INSTANCES = [
     "https://xcancel.com"
 ]
 
-def scrape_twitter(max_tweets: int = 5) -> List[Dict]:
+def scrape_twitter(max_tweets: int = 5, max_age_hours: int = 2) -> List[Dict]:
     """
     Scrapes recent tweets from configured accounts using Nitter RSS feeds.
-    This avoids snscrape and official API rate limits.
+    Checks the `pubDate` to only return content strictly published within the last `max_age_hours` 
+    to prevent fetching duplicate old content across scheduling cycles.
     """
     scraped_tweets = []
     logger.info("Starting Twitter scraping using Nitter instances.")
@@ -60,8 +61,30 @@ def scrape_twitter(max_tweets: int = 5) -> List[Dict]:
                     logger.debug(f"No tweets found in RSS for @{account} on {instance}. Trying next...")
                     continue
 
-                for item in items[:max_tweets]:
+                for item in items:
                     raw_text = item.description.text if item.description else ""
+                    text = clean_text(raw_text)
+                    link = item.link.text if item.link else ""
+                    pub_date_str = item.pubDate.text if item.pubDate else ""
+                    
+                    if not text or not pub_date_str:
+                        continue
+                        
+                    # Parse the RSS pubDate (usually RFC-822 formatted like "Sun, 08 Mar 2026 09:33:05 GMT")
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        import pytz
+                        import datetime
+                        
+                        dt = parsedate_to_datetime(pub_date_str)
+                        # We just need relative age in hours securely
+                        now_utc = datetime.datetime.now(datetime.timezone.utc)
+                        age = (now_utc - dt).total_seconds() / 3600.0
+                        
+                        if age > max_age_hours:
+                            continue # Too old, skip it
+                    except Exception as e:
+                        logger.debug(f"Could not parse pubDate '{pub_date_str}': {e}")
                     text = clean_text(raw_text)
                     link = item.link.text if item.link else ""
                     

@@ -7,9 +7,10 @@ from utils.text_cleaner import clean_text
 
 logger = get_logger()
 
-def scrape_news() -> List[Dict]:
+def scrape_news(max_age_hours: int = 12) -> List[Dict]:
     """
     Scrapes headlines and links from configured RSS feeds.
+    Only keeps items published within the last max_age_hours.
     """
     scraped_news = []
     logger.info("Starting news scraping from RSS feeds.")
@@ -26,10 +27,28 @@ def scrape_news() -> List[Dict]:
             items = soup.find_all("item")
 
             # Limit to top 5 per site to avoid overwhelming
-            for item in items[:5]:
+            for item in items:
                 title = clean_text(item.title.text if item.title else "")
                 link = item.link.text if item.link else ""
                 description = clean_text(item.description.text if item.description else "")
+                pub_date_str = item.pubDate.text if item.pubDate else ""
+
+                if not title or not link or not pub_date_str:
+                    continue
+                    
+                # Parse the RSS pubDate and determine age in hours
+                try:
+                    from email.utils import parsedate_to_datetime
+                    import datetime
+                    
+                    dt = parsedate_to_datetime(pub_date_str)
+                    now_utc = datetime.datetime.now(datetime.timezone.utc)
+                    age = (now_utc - dt).total_seconds() / 3600.0
+                    
+                    if age > max_age_hours:
+                        continue # Skip news that is older than max_age_hours
+                except Exception as e:
+                    logger.debug(f"Could not parse pubDate '{pub_date_str}' from {site_name}: {e}")
 
                 if title and link:
                     scraped_news.append({
