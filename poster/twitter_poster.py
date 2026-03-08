@@ -74,7 +74,8 @@ def post_tweet(tweet_text: str, hashtags: str = "", image_path: Optional[str] = 
             
             # Type the tweet text
             logger.debug("Typing tweet content...")
-            page.locator(editor_selector).fill(final_content)
+            # Use .first to resolve strict mode issue because Twitter renders multiple textareas
+            page.locator(editor_selector).first.fill(final_content)
             time.sleep(1) # Humanize the execution slightly
             
             # Upload Image if provided
@@ -93,7 +94,7 @@ def post_tweet(tweet_text: str, hashtags: str = "", image_path: Optional[str] = 
             logger.debug("Clicking the Post button...")
             post_button_selector = '[data-testid="tweetButton"]'
             page.wait_for_selector(post_button_selector, state="visible")
-            page.locator(post_button_selector).click()
+            page.locator(post_button_selector).first.click()
             
             # Wait a few seconds to ensure the POST request fires before the browser closes
             time.sleep(5)
