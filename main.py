@@ -58,10 +58,15 @@ def job_scrape_and_detect(content_type: str = None, top_n: int = 4):
         logger.warning(f"No {content_type or 'scraped'} data available to evaluate.")
         return []
     
-    # Return the top N candidates — filter out already-posted items first
-    candidates = detect_viral_content(all_data, cache["trends"], content_type, top_n=top_n)
-    fresh = filter_unposted(candidates)
-    return fresh
+    # ✅ Filter out already-posted items BEFORE viral detection
+    # This ensures the detector only picks from fresh, unposted content
+    fresh_data = filter_unposted(all_data)
+    if not fresh_data:
+        logger.warning(f"All scraped {content_type or 'content'} has already been posted. Nothing new to evaluate.")
+        return []
+    
+    logger.info(f"Fresh unposted pool: {len(fresh_data)} items (from {len(all_data)} scraped)")
+    return detect_viral_content(fresh_data, cache["trends"], content_type, top_n=top_n)
 
 def post_single_item(viral_item: dict) -> bool:
     """
