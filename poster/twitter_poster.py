@@ -19,13 +19,26 @@ def check_auth_token_configured() -> bool:
     return True
 
 def format_final_tweet(text: str, tags: str) -> str:
-    """Ensure the text and tags fit into Twitter's approximate limits."""
+    """Ensure the text and tags fit into Twitter's limit, dynamically trimming text to fit hashtags."""
     status = f"{text}\n\n{tags}"
-    if len(status) > 280:
-        if len(text) > 280:
-             return text[:277] + "..."
-        return text
-    return status
+    # If the combination fits perfectly, return it.
+    if len(status) <= 280:
+        return status
+        
+    # If tags exist, prioritize them and trim the main text to accommodate
+    if tags:
+        # Prevent edge case where tags themselves are outrageously long
+        if len(tags) > 100:
+            tags = tags[:97] + "..."
+            
+        space_remaining = 280 - len(tags) - 5  # 5 is for '...\n\n'
+        if space_remaining > 5:
+            return f"{text[:space_remaining]}...\n\n{tags}"
+            
+    # Fallback to pure text truncation if tags are missing or logic fails
+    if len(text) > 280:
+         return text[:277] + "..."
+    return text
 
 def post_tweet(tweet_text: str, hashtags: str = "", image_path: Optional[str] = None) -> bool:
     """

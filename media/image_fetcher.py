@@ -49,8 +49,14 @@ def fetch_image(content_text: str) -> Optional[str]:
         api_response = requests.get(UNSPLASH_API_URL, headers=headers, params=params, timeout=15)
         
         if api_response.status_code == 404:
-            logger.warning(f"No Unsplash image found for query: '{keyword}'")
-            return None
+            logger.warning(f"No Unsplash image found for strict query: '{keyword}'. Trying fallback broad query.")
+            # Fallback to a broader visualization if the AI query is too specific
+            params["query"] = "news trending"
+            api_response = requests.get(UNSPLASH_API_URL, headers=headers, params=params, timeout=15)
+            
+            # If even the fallback fails, return None natively
+            if api_response.status_code == 404:
+                return None
             
         api_response.raise_for_status()
         
