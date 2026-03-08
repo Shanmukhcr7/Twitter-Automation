@@ -43,14 +43,13 @@ def calculate_score(item: Dict, trends: List[str]) -> Tuple[float, List[str]]:
 
 from ai.ai_client import rate_virality
 
-def detect_viral_content(aggregated_data: List[Dict], trends: List[str], target_type: str = None) -> Dict:
+def detect_viral_content(aggregated_data: List[Dict], trends: List[str], target_type: str = None, top_n: int = 1) -> List[Dict]:
     """
-    Evaluates a list of scraped data items and returns the one with the highest viral score.
-    Now filters by `target_type` ("news" or "tweets"), then pulls top 5 heuristically, then applies AI rating.
+    Evaluates a list of scraped data items and returns a list of the top `top_n` items with the highest viral scores.
     """
     if not aggregated_data:
         logger.warning("No data provided to viral detector.")
-        return {}
+        return []
         
     # Pre-filter if a target type was specified
     if target_type == "news":
@@ -62,7 +61,7 @@ def detect_viral_content(aggregated_data: List[Dict], trends: List[str], target_
         
     if not filtered_data:
         logger.warning(f"No data matching target_type '{target_type}' found to evaluate.")
-        return {}
+        return []
 
     logger.info(f"Evaluating {len(filtered_data)} {target_type or 'all'} items heuristically against {len(trends)} trends.")
 
@@ -79,12 +78,11 @@ def detect_viral_content(aggregated_data: List[Dict], trends: List[str], target_
     # Sort descending by base score
     scored_items.sort(key=lambda x: x["base_score"], reverse=True)
     
-    # 2. Pick top 5 candidates to save API cost
-    top_candidates = scored_items[:5]
+    # 2. Pick top candidates to save API cost (Take top 8 to ensure we get 4 good AI scores)
+    top_candidates = scored_items[:8]
     logger.info(f"Selected top {len(top_candidates)} candidates for AI viral scoring.")
 
-    best_item = None
-    highest_ai_score = -1
+    evaluated_items = []
 
     for candidate in top_candidates:
         item = candidate["item"]
@@ -92,26 +90,26 @@ def detect_viral_content(aggregated_data: List[Dict], trends: List[str], target_
         
         ai_score = rate_virality(text)
         
-        # Fallback if AI fails (use base_score conceptually, or just skip)
+        # Fallback if AI fails
         if ai_score is None:
             logger.warning("AI viral rating failed. Falling back to heuristic baseline.")
-            return top_candidates[0]["item"] # Return the #1 heuristic choice
+            ai_score = candidate["base_score"] # Inject base score just for sorting purposes
             
         logger.debug(f"AI Viral Score for candidate: {ai_score}/10")
         
-        if ai_score >= 7 and ai_score > highest_ai_score:
-            highest_ai_score = ai_score
-            best_item = item
-            # Inject matched trends for downstream use
-            best_item["matched_trends"] = candidate["matched_trends"]
-            best_item["viral_score"] = ai_score
+        item["matched_trends"] = candidate["matched_trends"]
+        item["viral_score"] = ai_score
+        evaluated_items.append(item)
 
-    if best_item:
-        logger.info(f"✅ AI Selected viral content with score {highest_ai_score}: {best_item.get('title') or best_item.get('text')[:50]}...")
-        return best_item
+    # Sort by AI viral score descending
+    evaluated_items.sort(key=lambda x: x.get("viral_score", 0), reverse=True)
+    
+    # Grab the requested amount of top items
+    final_selections = evaluated_items[:top_n]
+    
+    if final_selections:
+        logger.info(f"✅ Selected top {len(final_selections)} viral content items based on AI scoring.")
+    else:
+        logger.warning("No items met evaluation criteria.")
         
-    logger.info("No candidates met the viral score threshold of 7. Returning top heuristic candidate as fallback.")
-    fallback = top_candidates[0]["item"]
-    fallback["matched_trends"] = top_candidates[0]["matched_trends"]
-    fallback["viral_score"] = 0 # Mark it as non-viral but best available
-    return fallback
+    return final_selections

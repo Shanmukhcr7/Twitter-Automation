@@ -29,10 +29,14 @@ def job_scrape_news():
 
 def job_scrape_twitter():
     logger.info("Running scheduled job: Scrape Twitter")
-    cache["tweets"] = scrape_twitter(max_tweets=2) # keep lightweight
+    cache["tweets"] = scrape_twitter(max_tweets=5) # fetch enough for the top 4 queue
 
-def job_evaluate_and_post(content_type: str = None):
-    logger.info(f"Running scheduled job: Evaluate & Post (Targeting: {content_type or 'all'})")
+def job_scrape_and_detect(content_type: str = None, top_n: int = 4):
+    """
+    Scrapes the requested targets, evaluates their virality against current trends,
+    and returns a list of the top `top_n` candidates.
+    """
+    logger.info(f"Running scheduled job: Scrape & Detect (Targeting: {content_type or 'all'}, Top N: {top_n})")
     
     # If no data exists yet, attempt to fetch it directly
     if not cache["trends"]: job_scrape_trends()
@@ -51,20 +55,20 @@ def job_evaluate_and_post(content_type: str = None):
         
     if not all_data:
         logger.warning(f"No {content_type or 'scraped'} data available to evaluate.")
-        return
+        return []
     
-    viral_item = detect_viral_content(all_data, cache["trends"], content_type)
-    
+    # Return the top N candidates safely extracted from the dataset
+    return detect_viral_content(all_data, cache["trends"], content_type, top_n=top_n)
+
+def post_single_item(viral_item: dict) -> bool:
+    """
+    Executes the generative AI pipeline and Playwright workflow for a single item.
+    """
     if not viral_item:
-        logger.warning("No viral content could be determined right now. Skipping post.")
-        return
+        logger.warning("Empty item provided to poster. Skipping.")
+        return False
 
-    # Check against a minimum score threshold (optional, set to 0 to always post the best one found)
-    if viral_item.get('viral_score', 0) < 5.0 and viral_item.get('type') != 'news':
-        logger.info("Highest scoring item didn't meet threshold. Waiting for next cycle.")
-        return
-
-    logger.info("Starting generation pipeline for viral item.")
+    logger.info(f"Starting generation pipeline for item: {viral_item.get('title') or viral_item.get('text')[:30]}")
     
     # Generate content with AI rules
     tweet_text = generate_tweet(viral_item)
@@ -77,12 +81,14 @@ def job_evaluate_and_post(content_type: str = None):
     # Post
     success = post_tweet(tweet_text, hashtags, image_path)
     if success:
-        logger.info("Successfully posted scheduled tweet.")
-        # Clear out the item to avoid reposting (mock clearing by emptying cache or just let it overwrite next cycle)
-        # In a real DB we'd track posted URLs
+        logger.info("✅ Successfully posted queued item.")
+        return True
     else:
-        logger.error("Failed to post scheduled tweet.")
+        logger.error("❌ Failed to post queued item.")
+        return False
 
 if __name__ == "__main__":
     logger.info("Bot started manually, running one full sequence.")
-    job_evaluate_and_post()
+    items = job_scrape_and_detect(top_n=1)
+    if items:
+        post_single_item(items[0])
