@@ -17,22 +17,28 @@ def init_twitter_client() -> bool:
     """Initialize Twitter clients (v1.1 for media, v2 for tweeting)."""
     global api, client
     
+    # We require the 4 main keys for complete coverage (OAuth1.0a + OAuth2 User Context)
     if not all([TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET]):
         logger.error("Twitter credentials are not fully configured in environment.")
         return False
         
     try:
-        # v1.1 auth for media upload
+        # v1.1 auth for media upload (Requires OAuth 1.0a User Context)
         auth = tweepy.OAuth1UserHandler(
             TWITTER_API_KEY, TWITTER_API_SECRET,
             TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET
         )
         api = tweepy.API(auth, wait_on_rate_limit=True)
         
-        # Verify v1.1 credentials (fails if keys are invalid)
-        api.verify_credentials()
+        # Verify v1.1 credentials. This throws 401 if tokens are invalid or missing 'Read and Write' permission.
+        try:
+            api.verify_credentials()
+        except tweepy.errors.Unauthorized as e:
+            logger.error(f"v1.1 Authentication Failed (401 Unauthorized): {e}")
+            logger.error("This usually means your API Keys are wrong, OR your Twitter Developer App is still set to 'Read-Only'. You must change it to 'Read and Write' and regenerate your Access Tokens.")
+            return False
         
-        # v2 Client for posting the tweet
+        # v2 Client for posting the tweet (Using OAuth 1.0a User Auth Context for create_tweet)
         client = tweepy.Client(
             consumer_key=TWITTER_API_KEY, consumer_secret=TWITTER_API_SECRET,
             access_token=TWITTER_ACCESS_TOKEN, access_token_secret=TWITTER_ACCESS_SECRET,
