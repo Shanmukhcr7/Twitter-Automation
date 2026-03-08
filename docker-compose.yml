@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  twitter-bot:
+    build: .
+    container_name: twitter_viral_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Map local directories so logs and temporary images persist outside the container 
+    # (Optional in Coolify, but good practice if mounted persistently)
+    volumes:
+      - ./logs:/app/logs
+      - ./media/temp:/app/media/temp
