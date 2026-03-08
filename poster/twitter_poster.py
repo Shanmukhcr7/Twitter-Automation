@@ -90,11 +90,11 @@ def post_tweet(tweet_text: str, hashtags: str = "", image_path: Optional[str] = 
                 page.wait_for_selector('[data-testid="attachments"]', state="visible", timeout=20000)
                 time.sleep(2)
                 
-            # Click the Post button
-            logger.debug("Clicking the Post button...")
-            post_button_locator = page.locator('[data-testid="tweetButton"]:not([disabled])').first
-            post_button_locator.wait_for(state="visible", timeout=15000)
-            post_button_locator.click()
+            # Use the global Twitter keyboard shortcut to post (Ctrl+Enter) instead of unreliable DOM buttons
+            logger.debug("Dispatching Ctrl+Enter to trigger post...")
+            # We wait 3 extra seconds to ensure the image upload backend has completely attached the media
+            time.sleep(3)
+            page.keyboard.press("Control+Enter")
             
             # Wait a few seconds to ensure the POST request fires before the browser closes
             time.sleep(5)
