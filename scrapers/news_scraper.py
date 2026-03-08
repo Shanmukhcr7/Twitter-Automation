@@ -7,10 +7,11 @@ from utils.text_cleaner import clean_text
 
 logger = get_logger()
 
-def scrape_news(max_age_hours: int = 12) -> List[Dict]:
+def scrape_news(max_age_hours: int = 24) -> List[Dict]:
     """
     Scrapes headlines and links from configured RSS feeds.
     Only keeps items published within the last max_age_hours.
+    Default 24h covers both morning and evening news cycles.
     """
     scraped_news = []
     logger.info("Starting news scraping from RSS feeds.")
@@ -36,19 +37,28 @@ def scrape_news(max_age_hours: int = 12) -> List[Dict]:
                 if not title or not link or not pub_date_str:
                     continue
                     
-                # Parse the RSS pubDate and determine age in hours
-                try:
-                    from email.utils import parsedate_to_datetime
-                    import datetime
-                    
-                    dt = parsedate_to_datetime(pub_date_str)
-                    now_utc = datetime.datetime.now(datetime.timezone.utc)
-                    age = (now_utc - dt).total_seconds() / 3600.0
-                    
-                    if age > max_age_hours:
-                        continue # Skip news that is older than max_age_hours
-                except Exception as e:
-                    logger.debug(f"Could not parse pubDate '{pub_date_str}' from {site_name}: {e}")
+                # Parse the RSS pubDate and enforce freshness
+                date_ok = False
+                if pub_date_str:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        import datetime
+
+                        dt = parsedate_to_datetime(pub_date_str)
+                        now_utc = datetime.datetime.now(datetime.timezone.utc)
+                        age = (now_utc - dt).total_seconds() / 3600.0
+
+                        if age <= max_age_hours:
+                            date_ok = True
+                        else:
+                            logger.debug(f"Skipping news aged {age:.1f}h from {site_name}: {title[:40]}")
+                    except Exception as e:
+                        logger.debug(f"Could not parse pubDate '{pub_date_str}' from {site_name}: {e}. Skipping.")
+                else:
+                    logger.debug(f"No pubDate in item from {site_name}. Skipping.")
+
+                if not date_ok:
+                    continue
 
                 if title and link:
                     scraped_news.append({
