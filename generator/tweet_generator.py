@@ -27,7 +27,7 @@ def format_tweet(item: Dict) -> str:
     author = item.get("author", "someone")
     
     # We strip URLs from text usually, so we quote it
-    return f"As @{author} pointed out:\n\"{text}\""
+    return f"Tweet from {author}:\n\"{text}\""
 
 from ai.ai_client import generate_text
 
@@ -51,9 +51,14 @@ def generate_tweet(item: Dict) -> str:
     else:
         base_content = item.get("title", item.get("text", "Interesting development taking place right now!"))
 
+    # Extract author if it's a tweet for the credits instruction
+    author_instruction = ""
+    if item_type == "tweet" and "author" in item:
+        author_instruction = f"\n• EXACTLY at the very end of the tweet, you MUST include: 'credits to @{item['author']}'"
+
     # AI Prompt Construction
     prompt = f"""Rewrite the following content into an engaging Twitter post under 250 characters.
-Make it exciting and suitable for social media.
+Make it exciting and suitable for social media. Write a full tweet natively.
 
 Content:
 {base_content}
@@ -61,7 +66,7 @@ Content:
 Ensure:
 • tweet length < 280 characters
 • natural tone
-• no emojis overload"""
+• no emojis overload{author_instruction}"""
 
     ai_tweet = generate_text(prompt)
     
