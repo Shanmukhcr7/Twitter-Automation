@@ -1,4 +1,4 @@
-tweepy
+playwright
 beautifulsoup4
 requests
 schedule
