@@ -27,7 +27,15 @@ def fill_queues(current_hour: int):
     if current_hour % SCHEDULE_TRENDS_SCRAPE == 0:
         job_scrape_trends()
 
-    # Tweets: Pick Top 4 published in last 1 hour
+    # Tweets are refreshed per configured interval
+    if current_hour % SCHEDULE_TWITTER_SCRAPE == 0:
+        job_scrape_twitter()
+
+    # News are refreshed per configured interval
+    if current_hour % SCHEDULE_NEWS_SCRAPE == 0:
+        job_scrape_news()
+
+    # Tweets: Pick Top 4 newly scraped to fill the posting queue
     new_tweets = job_scrape_and_detect(content_type="tweets", top_n=4)
     if new_tweets:
         TWEET_QUEUE.extend(new_tweets)
