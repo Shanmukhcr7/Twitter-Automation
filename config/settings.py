@@ -19,7 +19,7 @@ TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
 TWITTER_ACCESS_SECRET = os.getenv("TWITTER_ACCESS_SECRET")
 
 # NVIDIA API Credentials
-NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "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")
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "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")
 
 # Unsplash API Credentials
 UNSPLASH_KEY = os.getenv("UNSPLASH_KEY")

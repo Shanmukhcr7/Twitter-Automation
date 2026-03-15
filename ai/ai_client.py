@@ -4,83 +4,61 @@ from time import sleep
 from typing import Optional
 from config.settings import NVIDIA_API_KEY
 from utils.logger import get_logger
+from openai import OpenAI
 
 logger = get_logger()
 
-NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-MODEL_NAME = "qwen/qwen3.5-122b-a10b"
+NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1"
+MODEL_NAME = "meta/llama-3.1-405b-instruct"
+
+ai_client = OpenAI(
+    base_url=NVIDIA_API_URL,
+    api_key=NVIDIA_API_KEY
+) if NVIDIA_API_KEY else None
 
 def _call_ai_api(prompt: str, system_message: str = "You are a helpful AI automation assistant.", max_tokens: int = 500, stream: bool = False, retries: int = 3) -> Optional[str]:
     """
-    Core function to interact with the NVIDIA API.
+    Core function to interact with the NVIDIA API using the OpenAI SDK.
     Handles streaming/non-streaming, retries, and rate limiting.
     """
-    if not NVIDIA_API_KEY:
-        logger.error("NVIDIA_API_KEY not found in environment.")
+    if not ai_client:
+        logger.error("NVIDIA_API_KEY not found in environment. Client not initialized.")
         return None
-
-    headers = {
-        "Authorization": f"Bearer {NVIDIA_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": MODEL_NAME,
-        "messages": [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.7,
-        "max_tokens": max_tokens,
-        "stream": stream
-    }
 
     for attempt in range(1, retries + 1):
         try:
             logger.info(f"AI Request Start | Model: {MODEL_NAME} | Attempt: {attempt}")
             
-            # Use streaming parsing if requested
+            completion = ai_client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2,
+                top_p=0.7,
+                max_tokens=max_tokens,
+                stream=stream
+            )
+            
             if stream:
-                response = requests.post(NVIDIA_API_URL, headers=headers, json=payload, stream=True, timeout=30)
-                response.raise_for_status()
-                
                 full_content = ""
-                for line in response.iter_lines():
-                    if line:
-                        line_text = line.decode('utf-8')
-                        if line_text.startswith("data: ") and line_text != "data: [DONE]":
-                            data = json.loads(line_text[6:])
-                            if 'choices' in data and len(data['choices']) > 0:
-                                delta = data['choices'][0].get('delta', {})
-                                if 'content' in delta:
-                                    full_content += delta['content']
+                for chunk in completion:
+                    if not chunk.choices:
+                        continue
+                    if getattr(chunk.choices[0], "delta", None) and chunk.choices[0].delta.content is not None:
+                        full_content += chunk.choices[0].delta.content
                 
                 logger.info("AI Stream Response Received.")
                 return full_content.strip()
 
             else:
-                # Non-streaming parsing
-                response = requests.post(NVIDIA_API_URL, headers=headers, json=payload, timeout=30)
-                response.raise_for_status()
-                
-                data = response.json()
                 logger.info("AI Standard Response Received.")
-                return data['choices'][0]['message']['content'].strip()
+                return completion.choices[0].message.content.strip()
 
-        except requests.exceptions.HTTPError as http_err:
-            logger.error(f"AI API HTTP Error (Attempt {attempt}/{retries}): {http_err} - {response.text}")
-            if response.status_code == 429: # Rate limit
-                sleep_time = attempt * 2
-                logger.warning(f"Rate limited. Sleeping {sleep_time}s.")
-                sleep(sleep_time)
-            elif response.status_code >= 500:
-                sleep(attempt)
-            else:
-                break # Client error, no retry
-                
         except Exception as e:
             logger.error(f"AI Request Failure (Attempt {attempt}/{retries}): {e}")
-            sleep(attempt)
+            sleep(attempt * 2)
 
     logger.error("AI Request failed after all retries.")
     return None
