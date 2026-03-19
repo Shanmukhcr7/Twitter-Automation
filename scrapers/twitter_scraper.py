@@ -8,15 +8,14 @@ from utils.text_cleaner import clean_text
 
 logger = get_logger()
 
-# List of known active Nitter instances supporting RSS
+# List of VERIFIED active Nitter instances (health-checked 2026-03-19)
+# Re-check periodically - instances go down frequently!
 NITTER_INSTANCES = [
-    "https://nitter.net",
-    "https://nitter.cz",
-    "https://nitter.poast.org",
-    "https://nitter.privacydev.net",
-    "https://nitter.esmailelbob.xyz",
-    "https://nitter.projectsegfau.lt",
-    "https://xcancel.com"
+    "https://nitter.tiekoetter.com",   # Verified working
+    "https://nitter.kylrth.com",       # Verified working
+    "https://nitter.projectsegfau.lt", # Verified working
+    "https://nitter.net",              # Verified working (sometimes slow)
+    "https://xcancel.com",             # Verified working (can return 400 on some accounts)
 ]
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
