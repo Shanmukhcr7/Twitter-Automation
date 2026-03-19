@@ -8,14 +8,17 @@ from utils.text_cleaner import clean_text
 
 logger = get_logger()
 
-# List of VERIFIED active Nitter instances (health-checked 2026-03-19)
-# Re-check periodically - instances go down frequently!
+# Nitter instances (validated 2026-03-19 for REAL RSS output, not just HTTP 200)
+# Many instances return HTTP 200 but serve HTML captcha pages. The scraper now
+# validates content-type/content to detect and skip these fake-200 responses.
 NITTER_INSTANCES = [
-    "https://nitter.tiekoetter.com",   # Verified working
-    "https://nitter.kylrth.com",       # Verified working
-    "https://nitter.projectsegfau.lt", # Verified working
-    "https://nitter.net",              # Verified working (sometimes slow)
-    "https://xcancel.com",             # Verified working (can return 400 on some accounts)
+    "https://nitter.net",              # Primary: real RSS confirmed
+    "https://xcancel.com",             # Fallback: real RSS confirmed (some accounts 400)
+    # Candidates below: may be blocked by captcha on cloud IPs - keep for retry attempts
+    "https://nitter.tiekoetter.com",
+    "https://nitter.privacyredirect.com",
+    "https://nitter.projectsegfau.lt",
+    "https://nitter.kylrth.com",
 ]
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -40,20 +43,33 @@ def _scrape_account(account: str, max_age_hours: int) -> List[Dict]:
 
         try:
             logger.debug(f"Trying Nitter instance: {rss_url}")
-            response = requests.get(rss_url, headers=headers, timeout=10)
+            response = requests.get(rss_url, headers=headers, timeout=12)
 
             # If rate-limited or instance down, try the next one
             if response.status_code != 200:
                 logger.debug(f"Instance {instance} returned status {response.status_code}. Trying next...")
                 continue
 
-            response.raise_for_status()
+            # CRITICAL: Many Nitter instances respond with HTTP 200 but serve an HTML
+            # captcha/auth page instead of RSS XML when they block datacenter IPs.
+            # We must validate the response is actually RSS before parsing it.
+            content_type = response.headers.get("Content-Type", "")
+            response_text = response.text
+            is_real_rss = (
+                "xml" in content_type or "rss" in content_type
+                or response_text.strip().startswith("<?xml")
+                or "<rss" in response_text[:300]
+                or "<channel>" in response_text[:500]
+            )
+            if not is_real_rss:
+                logger.debug(f"Instance {instance} returned HTML (captcha/auth page) instead of RSS. Trying next...")
+                continue
 
             soup = BeautifulSoup(response.content, "lxml-xml")
             items = soup.find_all("item")
 
             if not items:
-                logger.debug(f"No tweets found in RSS for @{account} on {instance}. Trying next...")
+                logger.debug(f"No items in RSS for @{account} on {instance}. Trying next...")
                 continue
 
             for item in items:
