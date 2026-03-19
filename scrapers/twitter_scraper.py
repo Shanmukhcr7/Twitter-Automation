@@ -1,5 +1,4 @@
 import requests
-import random
 from bs4 import BeautifulSoup
 from typing import List, Dict
 from config.settings import MONITORED_ACCOUNTS
@@ -8,17 +7,13 @@ from utils.text_cleaner import clean_text
 
 logger = get_logger()
 
-# Nitter instances (validated 2026-03-19 for REAL RSS output, not just HTTP 200)
-# Many instances return HTTP 200 but serve HTML captcha pages. The scraper now
-# validates content-type/content to detect and skip these fake-200 responses.
+# Nitter instance list - ONLY real RSS-serving instances (validated + production tested)
+# nitter.net is the sole reliable source for this Coolify server IP.
+# ALL other tested instances (kylrth, tiekoetter, privacyredirect, projectsegfau.lt)
+# return HTTP 200 but serve HTML captcha/auth pages instead of RSS - confirmed in production.
 NITTER_INSTANCES = [
-    "https://nitter.net",              # Primary: real RSS confirmed
-    "https://xcancel.com",             # Fallback: real RSS confirmed (some accounts 400)
-    # Candidates below: may be blocked by captcha on cloud IPs - keep for retry attempts
-    "https://nitter.tiekoetter.com",
-    "https://nitter.privacyredirect.com",
-    "https://nitter.projectsegfau.lt",
-    "https://nitter.kylrth.com",
+    "https://nitter.net",    # Primary: confirmed delivering real RSS XML
+    "https://xcancel.com",  # Fallback: sometimes 400s on certain large accounts
 ]
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -34,9 +29,9 @@ def _scrape_account(account: str, max_age_hours: int) -> List[Dict]:
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
 
-    # Shallow copy and shuffle instances to distribute load and handle potential blocks
-    instances = list(NITTER_INSTANCES)
-    random.shuffle(instances)
+    # Iterate NITTER_INSTANCES in fixed order (nitter.net first) - do NOT shuffle,
+    # as nitter.net is the only confirmed-working instance on this server's IP.
+    instances = NITTER_INSTANCES
 
     for instance in instances:
         rss_url = f"{instance}/{account}/rss"
