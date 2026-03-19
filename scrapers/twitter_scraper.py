@@ -1,4 +1,6 @@
 import requests
+import time
+import random as _random
 from bs4 import BeautifulSoup
 from typing import List, Dict
 from config.settings import MONITORED_ACCOUNTS
@@ -7,13 +9,13 @@ from utils.text_cleaner import clean_text
 
 logger = get_logger()
 
-# Nitter instance list - ONLY real RSS-serving instances (validated + production tested)
-# nitter.net is the sole reliable source for this Coolify server IP.
-# ALL other tested instances (kylrth, tiekoetter, privacyredirect, projectsegfau.lt)
-# return HTTP 200 but serve HTML captcha/auth pages instead of RSS - confirmed in production.
+# Nitter instances - both confirmed to serve real RSS from local testing.
+# Cloud server IPs (Coolify/datacenter) trigger rate-limiting when too many
+# concurrent requests are sent. We reduce max_workers to 3 to stay under the limit.
+# Additional instances can be added here if they pass the proper RSS check tool.
 NITTER_INSTANCES = [
     "https://nitter.net",    # Primary: confirmed delivering real RSS XML
-    "https://xcancel.com",  # Fallback: sometimes 400s on certain large accounts
+    "https://xcancel.com",  # Fallback: real RSS confirmed (some accounts 400)
 ]
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -29,16 +31,17 @@ def _scrape_account(account: str, max_age_hours: int) -> List[Dict]:
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
 
-    # Iterate NITTER_INSTANCES in fixed order (nitter.net first) - do NOT shuffle,
-    # as nitter.net is the only confirmed-working instance on this server's IP.
-    instances = NITTER_INSTANCES
+    # Add a small random delay before each scrape to spread the cloud server's
+    # concurrent requests and avoid triggering nitter.net's rate-limiter/IP ban.
+    # With max_workers=3, at most 3 accounts hit nitter.net simultaneously.
+    time.sleep(_random.uniform(0.5, 2.5))
 
-    for instance in instances:
+    for instance in NITTER_INSTANCES:
         rss_url = f"{instance}/{account}/rss"
 
         try:
             logger.debug(f"Trying Nitter instance: {rss_url}")
-            response = requests.get(rss_url, headers=headers, timeout=12)
+            response = requests.get(rss_url, headers=headers, timeout=15)
 
             # If rate-limited or instance down, try the next one
             if response.status_code != 200:
@@ -74,7 +77,6 @@ def _scrape_account(account: str, max_age_hours: int) -> List[Dict]:
                 pub_date_str = item.pubDate.text if item.pubDate else ""
 
                 # Extract native tweet image directly from Nitter's embedded HTML.
-                # Nitter puts tweet images as <img src="https://pbs.twimg.com/..."> in the description.
                 native_image_url = None
                 try:
                     desc_soup = BeautifulSoup(raw_html, "html.parser")
@@ -111,22 +113,20 @@ def _scrape_account(account: str, max_age_hours: int) -> List[Dict]:
                 if not date_ok:
                     continue
 
-                # Nitter RSS feed won't expose accurate likes/retweets unfortunately, 
-                # but we can grab the text and link effectively.
                 results.append({
                     "source": f"@{account}",
                     "author": account,
                     "text": text,
-                    "likes": 50, # Mock baseline engagement for scoring
-                    "retweets": 10, # Mock baseline engagement for scoring
+                    "likes": 50,
+                    "retweets": 10,
                     "url": link,
-                    "native_image_url": native_image_url,  # Direct tweet image if available
+                    "native_image_url": native_image_url,
                     "type": "tweet"
                 })
 
             logger.info(f"Successfully scraped @{account} using {instance}.")
             success = True
-            break # Move to the next account once successful
+            break
 
         except requests.RequestException as e:
             logger.debug(f"Failed to connect to {instance}: {e}")
@@ -136,20 +136,22 @@ def _scrape_account(account: str, max_age_hours: int) -> List[Dict]:
             continue
 
     if not success:
-        logger.warning(f"Failed to scrape @{account} across all mapped Nitter instances.")
+        logger.warning(f"Failed to scrape @{account} across all Nitter instances.")
         
     return results
 
 def scrape_twitter(max_tweets: int = 5, max_age_hours: int = 2) -> List[Dict]:
     """
     Scrapes recent tweets from configured accounts concurrently using Nitter RSS feeds.
-    Checks the `pubDate` to only return content strictly published within the last `max_age_hours` 
-    to prevent fetching duplicate old content across scheduling cycles.
+    Uses max_workers=3 to avoid triggering nitter.net's rate limiter from cloud IPs.
+    Each worker also sleeps 0.5-2.5s before the first request for additional jitter.
     """
     scraped_tweets = []
-    logger.info(f"Starting Twitter scraping using Nitter instances for {len(MONITORED_ACCOUNTS)} accounts concurrently.")
+    logger.info(f"Starting Twitter scraping for {len(MONITORED_ACCOUNTS)} accounts (max_workers=3 to avoid rate limiting).")
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    # IMPORTANT: Keep max_workers LOW (3) — nitter.net blocks cloud server IPs
+    # that send too many concurrent connections. 77 workers = instant rate limit ban.
+    with ThreadPoolExecutor(max_workers=3) as executor:
         future_to_account = {
             executor.submit(_scrape_account, account, max_age_hours): account
             for account in MONITORED_ACCOUNTS
