@@ -155,12 +155,28 @@ def _scrape_account(account: str, max_age_hours: int) -> List[Dict]:
                 native_image_url = None
                 try:
                     desc_soup = BeautifulSoup(raw_html, "html.parser")
-                    img_tag = desc_soup.find("img", src=lambda s: s and s.startswith("https://"))
+                    img_tag = desc_soup.find("img", src=True)
                     if img_tag:
-                        native_image_url = img_tag["src"]
-                        logger.debug(f"Extracted tweet image: {native_image_url[:60]}")
-                except Exception:
-                    pass
+                        raw_src = img_tag["src"]
+                        # Convert Nitter proxy URL back to direct Twitter URL
+                        # e.g. http://nitter.cx/pic/media%2FHD0... -> https://pbs.twimg.com/media/HD0...
+                        import urllib.parse
+                        parsed = urllib.parse.urlparse(raw_src)
+                        if "/pic/" in parsed.path:
+                            path_parts = parsed.path.split("/pic/", 1)
+                            if len(path_parts) > 1:
+                                decoded_path = urllib.parse.unquote(path_parts[1])
+                                if decoded_path.startswith("orig/"):
+                                    decoded_path = decoded_path[5:]
+                                native_image_url = f"https://pbs.twimg.com/{decoded_path}"
+                        
+                        if not native_image_url and raw_src.startswith("http"):
+                            native_image_url = raw_src
+
+                        if native_image_url:
+                            logger.debug(f"Extracted tweet image: {native_image_url[:80]}")
+                except Exception as e:
+                    logger.debug(f"Failed to extract image: {e}")
 
                 if not text_content:
                     continue
