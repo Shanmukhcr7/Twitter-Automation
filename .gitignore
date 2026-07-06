@@ -5,3 +5,9 @@ __pycache__/
 logs/
 media/temp/
 .DS_Store
+data/
+# Test and debug files
+test_*.py
+debug_*.py
+check_*.py
+*.txt
