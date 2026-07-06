@@ -9,7 +9,7 @@ from openai import OpenAI
 logger = get_logger()
 
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1"
-MODEL_NAME = "meta/llama-3.1-405b-instruct"
+MODEL_NAME = "meta/llama-3.3-70b-instruct"
 
 ai_client = OpenAI(
     base_url=NVIDIA_API_URL,
