@@ -1,4 +1,5 @@
 import sys
+import io
 from loguru import logger
 from config.settings import BASE_DIR
 
@@ -8,12 +9,11 @@ LOG_DIR.mkdir(exist_ok=True)
 # Remove default handler
 logger.remove()
 
-# Fix Windows console Unicode crash (cp1252 can't encode ✅ ₹ etc.)
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+# Wrap stdout in UTF-8 so emoji/unicode (✅ ₹ etc.) never crash the logger
+_utf8_stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 # Add console handler
-logger.add(sys.stdout, format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>", encoding="utf-8")
+logger.add(_utf8_stdout, format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
 
 
 # Add file handler for general info
