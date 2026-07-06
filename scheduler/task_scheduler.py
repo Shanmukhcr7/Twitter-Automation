@@ -2,109 +2,75 @@ import time
 import schedule
 import pytz
 from datetime import datetime
-from config.settings import SCHEDULE_TWITTER_SCRAPE, SCHEDULE_TRENDS_SCRAPE, SCHEDULE_NEWS_SCRAPE
-from main import job_scrape_trends, job_scrape_news, job_scrape_twitter, job_scrape_and_detect, post_single_item
+from main import job_scrape_and_detect, post_single_item, job_scrape_trends
 from utils.logger import get_logger
 
 logger = get_logger()
 
-# Setup India Standard Timezone
+# India Standard Timezone
 IST = pytz.timezone('Asia/Kolkata')
 
-# Sub-Interval Posting Queues (in-memory, refreshed hourly)
-TWEET_QUEUE = []
-NEWS_QUEUE = []
+# Active hours: 08:00 – 23:59 IST
+ACTIVE_START_HOUR = 8   # 08:00 IST
+ACTIVE_END_HOUR   = 23  # up to 23:59 IST (midnight stops posting)
 
 
-def fill_queues(current_hour: int):
+def is_active_hours() -> bool:
+    """Returns True if current IST time is within the active posting window."""
+    current_hour = datetime.now(IST).hour
+    return ACTIVE_START_HOUR <= current_hour <= ACTIVE_END_HOUR
+
+
+def run_cycle():
     """
-    Scrapes fresh content and replenishes in-memory posting queues.
-    Called at startup (regardless of minute) and at the top of every hour.
-    """
-    logger.info(f"Filling queues from fresh scrape (hour={current_hour})...")
-
-    # Trends are refreshed per configured interval
-    if current_hour % SCHEDULE_TRENDS_SCRAPE == 0:
-        job_scrape_trends()
-
-    # Tweets are refreshed per configured interval
-    if current_hour % SCHEDULE_TWITTER_SCRAPE == 0:
-        job_scrape_twitter()
-
-    # News are refreshed per configured interval
-    if current_hour % SCHEDULE_NEWS_SCRAPE == 0:
-        job_scrape_news()
-
-    # Tweets: Pick Top 4 newly scraped to fill the posting queue
-    new_tweets = job_scrape_and_detect(content_type="tweets", top_n=4)
-    if new_tweets:
-        TWEET_QUEUE.extend(new_tweets)
-        logger.info(f"Added {len(new_tweets)} tweets to TWEET_QUEUE. Total: {len(TWEET_QUEUE)}")
-    else:
-        logger.warning("No fresh tweets found to fill the queue this cycle.")
-
-    # News: Pick Top 4 only at 9am / 9pm IST (bi-daily)
-    if current_hour in [9, 21]:
-        new_news = job_scrape_and_detect(content_type="news", top_n=4)
-        if new_news:
-            NEWS_QUEUE.extend(new_news)
-            logger.info(f"Added {len(new_news)} news items to NEWS_QUEUE. Total: {len(NEWS_QUEUE)}")
-
-
-def dispatch_15min_job():
-    """
-    Sub-Interval dispatcher that fires every 15 minutes (:00, :15, :30, :45).
-    - Refills queues at the top of every hour.
-    - Pops and posts exactly 1 Tweet every 15 minutes.
-    - Pops and posts exactly 1 News item every 3 hours at the top of the hour.
+    One full scrape-detect-post cycle.
+    Scrapes the latest tweets (last 3 hours), picks the top-scoring fresh one, posts it.
+    Also scrapes news every 12 hours at 9 AM / 9 PM IST.
     """
     now_ist = datetime.now(IST)
     current_hour = now_ist.hour
-    current_minute = now_ist.minute
-    logger.info(f"Sub-Interval Dispatcher woke up. Current IST time: {now_ist.strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"=== 3-Hour Cycle Starting | IST: {now_ist.strftime('%Y-%m-%d %H:%M:%S')} ===")
 
+    # Guard: do nothing during quiet hours
+    if not is_active_hours():
+        logger.info(f"😴 Quiet hours ({now_ist.strftime('%H:%M')} IST). Skipping cycle. Resumes at 08:00 IST.")
+        return
 
+    # 1. Refresh trends periodically (every 6 hours)
+    if current_hour % 6 == 0:
+        job_scrape_trends()
 
-    # Top of the hour: refill the queues with fresh content
-    if current_minute < 15:
-        logger.info("Top of the hour — refreshing queues.")
-        fill_queues(current_hour)
-
-    # 1. Pop and post exactly 1 Tweet (every 15 minutes)
-    if len(TWEET_QUEUE) > 0:
-        logger.info(f"Popping 1 TWEET from queue. ({len(TWEET_QUEUE)} remaining)")
-        tweet_candidate = TWEET_QUEUE.pop(0)
-        post_single_item(tweet_candidate)
+    # 2. Post 1 tweet from the Twitter accounts (primary job, every cycle)
+    logger.info("Picking best fresh tweet to post...")
+    tweet_candidates = job_scrape_and_detect(content_type="tweets", top_n=1)
+    if tweet_candidates:
+        post_single_item(tweet_candidates[0])
     else:
-        logger.info("TWEET_QUEUE is empty. Waiting for next hourly scrape.")
+        logger.warning("No fresh unposted tweets available this cycle.")
 
-    # 2. Pop and post exactly 1 News item (every 3 hours at the top of the hour)
-    if current_hour % 3 == 0 and current_minute < 15:
-        if len(NEWS_QUEUE) > 0:
-            logger.info(f"Popping 1 NEWS from queue. ({len(NEWS_QUEUE)} remaining)")
-            news_candidate = NEWS_QUEUE.pop(0)
-            post_single_item(news_candidate)
+    # 3. Also post 1 news item at 9 AM / 9 PM IST (bi-daily)
+    if current_hour in [9, 21]:
+        logger.info("9 AM / 9 PM IST — also posting one news item.")
+        news_candidates = job_scrape_and_detect(content_type="news", top_n=1)
+        if news_candidates:
+            post_single_item(news_candidates[0])
         else:
-            logger.info("NEWS_QUEUE is empty. Expected if outside 9am/9pm scrape windows.")
+            logger.warning("No fresh unposted news available for this news slot.")
+
+    logger.info("=== Cycle complete. Next run in 3 hours. ===")
 
 
 def start_scheduler():
-    logger.info("Initializing timezone-aware task scheduler (IST)...")
+    logger.info("Initializing scheduler — 1 tweet every 3 hours (08:00–23:59 IST).")
 
-    # Schedule the master dispatcher to run every 15 minutes
-    schedule.every().hour.at(":00").do(dispatch_15min_job)
-    schedule.every().hour.at(":15").do(dispatch_15min_job)
-    schedule.every().hour.at(":30").do(dispatch_15min_job)
-    schedule.every().hour.at(":45").do(dispatch_15min_job)
+    # Schedule a cycle every 3 hours
+    schedule.every(3).hours.do(run_cycle)
 
-    logger.info("Scheduler started. Waiting for the next 15-minute mark. Press Ctrl+C to exit.")
+    # Run immediately on startup (first post right away)
+    logger.info("Running initial cycle on startup...")
+    run_cycle()
 
-    # Always pre-fill queues at startup regardless of current minute, then dispatch once
-    now_ist = datetime.now(IST)
-    logger.info("Performing initial queue fill on startup...")
-    fill_queues(now_ist.hour)
-    dispatch_15min_job()
-
+    logger.info("Scheduler running. Press Ctrl+C to stop.")
     try:
         while True:
             schedule.run_pending()

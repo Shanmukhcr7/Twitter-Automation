@@ -30,7 +30,7 @@ def job_scrape_news():
 
 def job_scrape_twitter():
     logger.info("Running scheduled job: Scrape Twitter")
-    cache["tweets"] = scrape_twitter(max_tweets=5) # fetch enough for the top 4 queue
+    cache["tweets"] = scrape_twitter(max_tweets=10, max_age_hours=3)  # 3h window matches posting interval
 
 def job_scrape_and_detect(content_type: str = None, top_n: int = 4):
     """
